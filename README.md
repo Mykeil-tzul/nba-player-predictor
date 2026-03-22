@@ -3,6 +3,7 @@
 Using Python and Machine Learning to predict NBA player performance.
 
 # 🏀 Luka Dončić Points Predictor
+https://nba-player-predictor-bytzul.streamlit.app/ 
 
 A Streamlit-powered NBA analytics app that predicts Luka Dončić's next game scoring performance using:
 
