@@ -1,7 +1,3 @@
-# NBA Player Performance Predictor
-
-Using Python and Machine Learning to predict NBA player performance.
-
 # 🏀 Luka Dončić Points Predictor
 https://nba-player-predictor-bytzul.streamlit.app/ 
 
