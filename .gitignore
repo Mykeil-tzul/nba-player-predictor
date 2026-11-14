@@ -3,5 +3,5 @@ __pycache__/
 .pytest_cache/
 .DS_Store
 data/raw/
-data/games.csv
-artifacts/
+artifacts/*
+!artifacts/courtiq.json

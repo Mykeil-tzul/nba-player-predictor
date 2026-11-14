@@ -1,5 +1,6 @@
 """CourtIQ's local-data Streamlit dashboard."""
 import json
+from html import escape
 from datetime import timedelta
 
 import pandas as pd
@@ -25,12 +26,17 @@ def nba_data(snapshot_version, artifact_version):
     return games, artifact
 
 
+SLUGS = {
+    1629029: "luka-doncic", 202681: "kyrie-irving", 1628369: "jayson-tatum",
+    1628983: "shai-gilgeous-alexander", 1628973: "jalen-brunson",
+}
+HEADSHOTS = "https://cdn.nba.com/headshots/nba/latest/1040x760"
 st.title("CourtIQ")
-st.caption("Next-appearance projections · NBA regular season")
+st.caption("NBA regular season · Next-game forecasts")
 with st.sidebar:
+    nba_ready = SNAPSHOT.is_file() and ARTIFACT.is_file()
     mode = st.radio(
-        "Data source", ("NBA snapshot", "Historical demo"),
-        index=0 if SNAPSHOT.exists() else 1,
+        "Data source", ("NBA snapshot", "Historical demo") if nba_ready else ("Historical demo",),
     )
     name = st.selectbox("Player", list(PLAYERS.values()))
     player_id = next(key for key, label in PLAYERS.items() if label == name)
@@ -53,7 +59,26 @@ except (OSError, ValueError, KeyError, TypeError) as error:
 
 player = games.loc[games.player_id.eq(player_id)].copy()
 entry = artifact["players"].get(str(player_id))
-st.header(name)
+st.html(f"""
+<style>
+.ciq-hero {{
+  display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+  padding: 1.25rem 1.5rem 0; margin-bottom: 1rem; overflow: hidden;
+  border: 1px solid #4b3841; border-radius: 1rem;
+  background: radial-gradient(ellipse at 85% 15%, #713f37, #242638 65%);
+}}
+.ciq-hero h2 {{ color: #fff; font-size: clamp(1.6rem, 5vw, 3.2rem); padding: 0; }}
+.ciq-hero p {{ color: #ffd3bd; }}
+.ciq-hero img {{ width: min(46%, 19rem); align-self: end; height: auto; }}
+[data-testid="stMetric"] {{ background: #1b202c; border: 1px solid #353b49;
+  border-radius: .8rem; padding: .9rem; }}
+</style>
+<section class="ciq-hero">
+  <div><h2>{escape(name)}</h2>
+  <p>{len(player)} recorded appearances</p></div>
+  <img src="{HEADSHOTS}/{player_id}.png" alt="{escape(name)} NBA headshot">
+</section>
+""")
 if player.empty:
     st.warning("No completed appearances in this snapshot.")
     st.stop()
@@ -73,7 +98,9 @@ if demo:
     if entry and entry["model"] is None:
         st.info("This player's demo history supports a five-game average. Ridge requires more appearances.")
 else:
-    st.caption("Confirm the game date and availability independently. CourtIQ uses local game logs.")
+    st.caption("Enter the scheduled game date and confirm availability before requesting a forecast.")
+    if (nba_today() - data_through).days > 3:
+        st.warning("This snapshot is more than three days old. Refresh the game logs and retrain.")
 if entry is None:
     st.warning(artifact["skipped"].get(str(player_id), "Insufficient history"))
 elif availability == "unknown":
@@ -89,7 +116,7 @@ else:
             column.metric(stat, f"{value:.1f}")
         st.caption(f"{entry['method']} · Assumes the player appears. PRA sums the three unrounded projections.")
 
-recent, validation = st.tabs(["Recent appearances", "Validation"])
+recent, validation, film = st.tabs(["Recent form", "Model accuracy", "Film room"])
 with recent:
     player["pra"] = player[["pts", "reb", "ast"]].sum(axis=1)
     display = player.tail(15).rename(columns={
@@ -107,6 +134,7 @@ with validation:
         st.info("Validation scores appear once there is sufficient history.")
     else:
         st.subheader("Mean absolute error")
+        st.write("This is the average size of a miss on later games. Lower is better.")
         st.caption(
             f"{entry['validation_count']} validation appearances · {entry['validation_start']} to "
             f"{entry['validation_end']} · Lower is better"
@@ -115,3 +143,14 @@ with validation:
             pd.DataFrame.from_dict(entry["mae"], orient="index"),
             column_config={stat: st.column_config.NumberColumn(format="%.2f") for stat in ("PTS", "REB", "AST", "PRA")},
         )
+
+with film:
+    portrait, details = st.columns([1, 2])
+    with portrait:
+        st.image(f"{HEADSHOTS}/{player_id}.png", caption=f"{name} · NBA.com", width=280)
+    with details:
+        st.subheader("Player highlights")
+        st.link_button("Watch on NBA.com ↗", f"https://www.nba.com/player/{player_id}/{SLUGS[player_id]}/videos")
+        if not demo:
+            st.write("Latest recorded game")
+            st.link_button("Open NBA game center ↗", f"https://www.nba.com/game/{player.iloc[-1].game_id}")

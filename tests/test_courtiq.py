@@ -10,6 +10,7 @@ import requests
 
 from src.data import COLUMNS, PLAYERS, normalize
 from src.fetch_data import collect, decode, download
+from src.import_archive import season_games
 from src.model import FEATURES, evaluate, features, fit, predict, verify_artifact
 
 LUKA, KYRIE, *_ = PLAYERS
@@ -83,6 +84,19 @@ class ModelingTests(unittest.TestCase):
 
 
 class CollectionTests(unittest.TestCase):
+    def test_archive_keeps_only_supported_regular_season_appearances(self):
+        rows = []
+        for game_id, player_id in [("0022600001", LUKA), ("0012600002", LUKA), ("0022600003", 99)]:
+            rows.append(dict(
+                game_id=game_id, player_id=player_id, game_date="2026-10-26",
+                min=30, pts=23, reb=5, ast=7, fga=15, fta=2, home=True,
+                team_id="1610612747", opp_team_id="1610612744",
+            ))
+        games = season_games(pd.DataFrame(rows), "2026-27")
+        self.assertEqual(games.game_id.tolist(), ["0022600001"])
+        self.assertEqual(games.matchup.tolist(), ["LAL vs. GSW"])
+
+
     def test_decode_nba_schema_and_leading_game_id_zeroes(self):
         payload = {"resultSets": [{
             "name": "PlayerGameLog",
