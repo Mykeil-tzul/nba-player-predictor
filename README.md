@@ -2,6 +2,10 @@
 
 [**Open the live CourtIQ dashboard**](https://nba-player-predictor-bytzul.streamlit.app/)
 
+![CourtIQ dashboard showing Luka Dončić’s projected points, rebounds, assists, and PRA](docs/courtiq-dashboard.png)
+
+*Example forecast for Luka Dončić using the November 13, 2026 data snapshot.*
+
 I built CourtIQ to see whether a player's recent box scores could improve on a simple five-game average. It started as a Luka Doncic points predictor. I expanded it into a Streamlit app that forecasts points, rebounds, assists and their sum (PRA) for Luka, Kyrie Irving, Jayson Tatum, Shai Gilgeous-Alexander and Jalen Brunson.
 
 I built the data pipeline, trained a separate model for each player and tested the forecasts on games played after the training period. On the 249 held-out appearances, Ridge beat the five-game average for points for three of the five players and for PRA for two. The app shows both methods' errors, so it's easy to see where the extra modeling helped.
