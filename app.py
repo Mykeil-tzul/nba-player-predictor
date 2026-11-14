@@ -1,210 +1,117 @@
-import streamlit as st
+"""CourtIQ's local-data Streamlit dashboard."""
+import json
+from datetime import timedelta
+
 import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-from sklearn.linear_model import LinearRegression
-from sklearn.metrics import mean_squared_error, r2_score
-from sklearn.model_selection import train_test_split
+import streamlit as st
 
-st.set_page_config(page_title="Luka Doncic Predictor", page_icon="🏀", layout="wide")
+from src.data import ARTIFACT, PLAYERS, SNAPSHOT, legacy_games, nba_today, read_snapshot
+from src.model import fit, predict, verify_artifact
 
-st.title("🏀 Luka Dončić Points Predictor")
-st.caption("A Streamlit app that uses rolling averages and advanced stats to predict Luka's next game points.")
+st.set_page_config(page_title="CourtIQ", page_icon="🏀", layout="wide")
 
-DATA_FILE = "database_24_25.csv"
 
 @st.cache_data
-def load_data(path: str) -> pd.DataFrame:
-    df = pd.read_csv(path)
-
-    # Keep only Luka
-    luka = df[df["Player"] == "Luka Dončić"].copy()
-
-    # Clean numeric columns used in the app/model
-    numeric_cols = [
-        "MP", "FG", "FGA", "FG%", "3P", "3PA", "3P%", "FT", "FTA", "FT%",
-        "TRB", "AST", "STL", "BLK", "PTS", "GmSc"
-    ]
-    for col in numeric_cols:
-        if col in luka.columns:
-            luka[col] = pd.to_numeric(luka[col], errors="coerce")
-
-    # Parse date if available and sort chronologically
-    if "Data" in luka.columns:
-        luka["Data"] = pd.to_datetime(luka["Data"], errors="coerce")
-        luka = luka.sort_values("Data")
-    else:
-        luka = luka.sort_index()
-
-    luka = luka.reset_index(drop=True)
-    luka["Game_Number"] = range(1, len(luka) + 1)
-
-    # Rolling features built from PRIOR games only to reduce leakage
-    base_roll_cols = ["PTS", "MP", "FGA", "3PA", "FTA", "FG%", "3P%", "FT%", "AST", "TRB", "GmSc"]
-    for col in base_roll_cols:
-        if col in luka.columns:
-            luka[f"rolling_{col.lower().replace('%', 'pct')}_3"] = luka[col].shift(1).rolling(3).mean()
-            luka[f"rolling_{col.lower().replace('%', 'pct')}_5"] = luka[col].shift(1).rolling(5).mean()
-
-    # Simple matchup/result encodings if present
-    if "Res" in luka.columns:
-        luka["win_flag"] = (luka["Res"] == "W").astype(int)
-        luka["rolling_win_flag_5"] = luka["win_flag"].shift(1).rolling(5).mean()
-
-    luka = luka.dropna().reset_index(drop=True)
-    return luka
+def demo_data():
+    games = legacy_games()
+    return games, fit(games, "demo")
 
 
-def build_model(luka_df: pd.DataFrame):
-    feature_cols = [
-        "MP", "FGA", "3PA", "FTA",
-        "rolling_pts_3", "rolling_pts_5",
-        "rolling_mp_5", "rolling_fga_5", "rolling_3pa_5", "rolling_fta_5",
-        "rolling_fg_pct_5", "rolling_3p_pct_5", "rolling_ft_pct_5",
-        "rolling_ast_5", "rolling_trb_5", "rolling_gmsc_5"
-    ]
+@st.cache_data
+def nba_data(snapshot_version, artifact_version):
+    games = read_snapshot(SNAPSHOT)
+    artifact = json.loads(ARTIFACT.read_text())
+    verify_artifact(artifact, games)
+    return games, artifact
 
-    feature_cols = [c for c in feature_cols if c in luka_df.columns]
 
-    X = luka_df[feature_cols]
-    y = luka_df["PTS"]
-
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.25, random_state=42
+st.title("CourtIQ")
+st.caption("Next-appearance projections · NBA regular season")
+with st.sidebar:
+    mode = st.radio(
+        "Data source", ("NBA snapshot", "Historical demo"),
+        index=0 if SNAPSHOT.exists() else 1,
+    )
+    name = st.selectbox("Player", list(PLAYERS.values()))
+    player_id = next(key for key, label in PLAYERS.items() if label == name)
+    availability = st.radio(
+        "Availability", ("unknown", "expected", "out"),
+        format_func={"unknown": "Unconfirmed", "expected": "Expected to play", "out": "Out / did not play"}.__getitem__,
+        key=f"availability-{mode}-{player_id}",
     )
 
-    model = LinearRegression()
-    model.fit(X_train, y_train)
-
-    preds = model.predict(X_test)
-    mse = mean_squared_error(y_test, preds)
-    rmse = float(np.sqrt(mse))
-    r2 = r2_score(y_test, preds)
-
-    comparison = pd.DataFrame({
-        "Actual": y_test.values,
-        "Predicted": preds
-    }).reset_index(drop=True)
-
-    return model, feature_cols, X_test, y_test, preds, comparison, mse, rmse, r2
-
-
+demo = mode == "Historical demo"
 try:
-    luka_df = load_data(DATA_FILE)
-except FileNotFoundError:
-    st.error("database_24_25.csv was not found. Make sure it is in the same folder as this app.")
+    if demo:
+        games, artifact = demo_data()
+        st.info("Historical demo · Partial 2024–25 data bundled with the repository.")
+    else:
+        games, artifact = nba_data(SNAPSHOT.stat().st_mtime_ns, ARTIFACT.stat().st_mtime_ns)
+except (OSError, ValueError, KeyError, TypeError) as error:
+    st.error(f"Could not load game data and model. Run `python -m src.fetch_data` and `python -m src.train`. {error}")
     st.stop()
 
-if luka_df.empty:
-    st.error("No Luka Dončić rows were found in the dataset.")
+player = games.loc[games.player_id.eq(player_id)].copy()
+entry = artifact["players"].get(str(player_id))
+st.header(name)
+if player.empty:
+    st.warning("No completed appearances in this snapshot.")
     st.stop()
 
-model, feature_cols, X_test, y_test, preds, comparison, mse, rmse, r2 = build_model(luka_df)
+last = player.game_date.max().date()
+data_through = games.game_date.max().date()
+first_target = last + timedelta(days=1)
+if not demo:
+    first_target = max(nba_today(), last + timedelta(days=1))
+game_date = st.sidebar.date_input(
+    "Target game date", value=first_target, min_value=first_target,
+    max_value=first_target + timedelta(days=60),
+)
+st.caption(f"Last recorded appearance {last:%b %d, %Y} · Snapshot through {data_through:%b %d, %Y}")
+if demo:
+    st.caption("Choose a hypothetical game date after this player's latest recorded appearance.")
+    if entry and entry["model"] is None:
+        st.info("This player's demo history supports a five-game average. Ridge requires more appearances.")
+else:
+    st.caption("Confirm the game date and availability independently. CourtIQ uses local game logs.")
+if entry is None:
+    st.warning(artifact["skipped"].get(str(player_id), "Insufficient history"))
+elif availability == "unknown":
+    st.info("Select Expected to play to see a projection conditional on an appearance.")
+else:
+    try:
+        projection = predict(artifact, games, player_id, game_date, availability, demo=demo)
+    except ValueError as error:
+        st.warning(str(error))
+    else:
+        st.subheader("Projected box score")
+        for column, (stat, value) in zip(st.columns(4), projection.items()):
+            column.metric(stat, f"{value:.1f}")
+        st.caption(f"{entry['method']} · Assumes the player appears. PRA sums the three unrounded projections.")
 
-latest = luka_df.iloc[-1]
-last_5 = luka_df.tail(5)
-last_10 = luka_df.tail(10)
-
-# Sidebar prediction controls
-st.sidebar.header("Predict Luka's Next Game")
-st.sidebar.caption("Adjust the game volume inputs below.")
-
-mp = st.sidebar.slider("Minutes Played (MP)", 28, 44, int(round(float(latest["MP"]))))
-fga = st.sidebar.slider("Field Goal Attempts (FGA)", 12, 35, int(round(float(latest["FGA"]))))
-three_pa = st.sidebar.slider("3-Point Attempts (3PA)", 3, 16, int(round(float(latest["3PA"]))))
-fta = st.sidebar.slider("Free Throw Attempts (FTA)", 2, 16, int(round(float(latest["FTA"]))))
-
-prediction_input = {
-    "MP": mp,
-    "FGA": fga,
-    "3PA": three_pa,
-    "FTA": fta,
-}
-
-# Fill model rolling/advanced features with latest known rolling values
-for col in feature_cols:
-    if col not in prediction_input:
-        prediction_input[col] = float(latest[col])
-
-prediction_df = pd.DataFrame([prediction_input])[feature_cols]
-predicted_points = float(model.predict(prediction_df)[0])
-
-# Top metrics
-m1, m2, m3, m4 = st.columns(4)
-m1.metric("Predicted Next Game Points", f"{predicted_points:.1f}")
-m2.metric("Luka Model RMSE", f"{rmse:.2f}")
-m3.metric("Luka Model R²", f"{r2:.2f}")
-m4.metric("Last Game Points", f"{float(last_10.iloc[-1]['PTS']):.0f}")
-
-st.markdown("---")
-
-left, right = st.columns([1.2, 1])
-
-with left:
-    st.subheader("Recent Scoring Form")
-    chart_df = luka_df[["Game_Number", "PTS", "rolling_pts_5"]].copy()
-    chart_df = chart_df.set_index("Game_Number")
-    st.line_chart(chart_df)
-
-    st.subheader("Last 10 Games")
-    show_cols = [c for c in ["Data", "Opp", "Res", "MP", "FGA", "3PA", "FTA", "AST", "TRB", "PTS", "GmSc"] if c in last_10.columns]
-    st.dataframe(last_10[show_cols].reset_index(drop=True), use_container_width=True)
-
-with right:
-    st.subheader("Prediction Snapshot")
-    st.write("**Input assumptions**")
-    st.write({
-        "MP": mp,
-        "FGA": fga,
-        "3PA": three_pa,
-        "FTA": fta,
-        "Rolling PTS (5)": round(float(latest.get("rolling_pts_5", np.nan)), 2),
-        "Rolling AST (5)": round(float(latest.get("rolling_ast_5", np.nan)), 2),
-        "Rolling TRB (5)": round(float(latest.get("rolling_trb_5", np.nan)), 2),
-        "Rolling GmSc (5)": round(float(latest.get("rolling_gmsc_5", np.nan)), 2),
+recent, validation = st.tabs(["Recent appearances", "Validation"])
+with recent:
+    player["pra"] = player[["pts", "reb", "ast"]].sum(axis=1)
+    display = player.tail(15).rename(columns={
+        "game_date": "Date", "matchup": "Matchup", "pts": "PTS",
+        "reb": "REB", "ast": "AST", "pra": "PRA", "minutes": "Minutes",
     })
-
-    st.subheader("Advanced Stats (Last 5 Games Avg)")
-    adv = pd.DataFrame({
-        "Metric": ["PTS", "AST", "TRB", "FG%", "3P%", "FT%", "GmSc"],
-        "Value": [
-            round(float(last_5["PTS"].mean()), 2),
-            round(float(last_5["AST"].mean()), 2),
-            round(float(last_5["TRB"].mean()), 2),
-            round(float(last_5["FG%"].mean()), 3),
-            round(float(last_5["3P%"].mean()), 3),
-            round(float(last_5["FT%"].mean()), 3),
-            round(float(last_5["GmSc"].mean()), 2),
-        ]
-    })
-    st.dataframe(adv, use_container_width=True, hide_index=True)
-
-st.markdown("---")
-
-c1, c2 = st.columns(2)
-
-with c1:
-    st.subheader("Actual vs Predicted (Model Test Set)")
-    fig, ax = plt.subplots(figsize=(6, 4))
-    ax.scatter(y_test, preds, alpha=0.8)
-    min_val = min(float(y_test.min()), float(preds.min()))
-    max_val = max(float(y_test.max()), float(preds.max()))
-    ax.plot([min_val, max_val], [min_val, max_val], linestyle="--")
-    ax.set_xlabel("Actual Points")
-    ax.set_ylabel("Predicted Points")
-    ax.set_title("Luka Actual vs Predicted")
-    st.pyplot(fig)
-
-with c2:
-    st.subheader("Prediction Errors")
-    comparison_plot = comparison.copy()
-    comparison_plot["Error"] = comparison_plot["Predicted"] - comparison_plot["Actual"]
-    st.bar_chart(comparison_plot["Error"])
-
-st.subheader("Model Comparison Table")
-st.dataframe(comparison.round(2), use_container_width=True)
-
-with st.expander("Show model features used"):
-    st.write(feature_cols)
-
-st.success("App ready. Save this file as app.py and run: streamlit run app.py")
+    st.line_chart(display.set_index("Date")[["PTS", "REB", "AST"]])
+    display["Date"] = display["Date"].dt.strftime("%Y-%m-%d")
+    st.dataframe(
+        display[["Date", "Matchup", "Minutes", "PTS", "REB", "AST", "PRA"]].iloc[::-1],
+        hide_index=True, use_container_width=True,
+    )
+with validation:
+    if entry is None:
+        st.info("Validation scores appear once there is sufficient history.")
+    else:
+        st.subheader("Mean absolute error")
+        st.caption(
+            f"{entry['validation_count']} validation appearances · {entry['validation_start']} to "
+            f"{entry['validation_end']} · Lower is better"
+        )
+        st.dataframe(
+            pd.DataFrame.from_dict(entry["mae"], orient="index"),
+            column_config={stat: st.column_config.NumberColumn(format="%.2f") for stat in ("PTS", "REB", "AST", "PRA")},
+        )
