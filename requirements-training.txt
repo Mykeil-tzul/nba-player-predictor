@@ -1,0 +1,4 @@
+-r requirements.txt
+requests==2.32.3
+scikit-learn==1.7.2
+pyarrow==20.0.0

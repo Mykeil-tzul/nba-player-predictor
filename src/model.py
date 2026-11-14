@@ -3,9 +3,6 @@ import hashlib
 
 import numpy as np
 import pandas as pd
-from sklearn.linear_model import Ridge
-from sklearn.pipeline import make_pipeline
-from sklearn.preprocessing import StandardScaler
 
 from src.data import PLAYERS, STATS, TARGETS
 
@@ -39,6 +36,10 @@ def fingerprint(games):
 
 
 def bundle_model(rows):
+    from sklearn.linear_model import Ridge
+    from sklearn.pipeline import make_pipeline
+    from sklearn.preprocessing import StandardScaler
+
     pipeline = make_pipeline(StandardScaler(), Ridge(alpha=20.0))
     pipeline.fit(rows[FEATURES], rows[TARGETS])
     scaler, ridge = pipeline.steps[0][1], pipeline.steps[1][1]

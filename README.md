@@ -68,9 +68,10 @@ Ridge was better than the five-game average on points for three players, but the
 
 ## Refresh the data and reproduce the results
 
-Run this command to reproduce the scores above from the included snapshot.
+The dashboard loads saved models for both modes. To train locally or refresh the data, install the training dependencies first.
 
 ```bash
+python -m pip install -r requirements-training.txt
 python -m src.train
 ```
 

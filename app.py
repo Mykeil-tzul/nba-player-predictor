@@ -7,24 +7,28 @@ import pandas as pd
 import streamlit as st
 
 from src.data import ARTIFACT, PLAYERS, SNAPSHOT, legacy_games, nba_today, read_snapshot
-from src.model import fit, predict, verify_artifact
+from src.model import predict, verify_artifact
 
 st.set_page_config(page_title="CourtIQ", page_icon="🏀", layout="wide")
 
 
-@st.cache_data
-def demo_data():
+@st.cache_resource(max_entries=1)
+def demo_data(artifact_version):
     games = legacy_games()
-    return games, fit(games, "demo")
+    artifact = json.loads(DEMO_ARTIFACT.read_text())
+    verify_artifact(artifact, games)
+    return games, artifact
 
 
-@st.cache_data
+@st.cache_resource(max_entries=1)
 def nba_data(snapshot_version, artifact_version):
     games = read_snapshot(SNAPSHOT)
     artifact = json.loads(ARTIFACT.read_text())
     verify_artifact(artifact, games)
     return games, artifact
 
+
+DEMO_ARTIFACT = ARTIFACT.with_name("demo.json")
 
 SLUGS = {
     1629029: "luka-doncic", 202681: "kyrie-irving", 1628369: "jayson-tatum",
@@ -49,7 +53,7 @@ with st.sidebar:
 demo = mode == "Historical demo"
 try:
     if demo:
-        games, artifact = demo_data()
+        games, artifact = demo_data(DEMO_ARTIFACT.stat().st_mtime_ns)
         st.info("Historical demo · Partial 2024–25 data bundled with the repository.")
     else:
         games, artifact = nba_data(SNAPSHOT.stat().st_mtime_ns, ARTIFACT.stat().st_mtime_ns)
