@@ -34,7 +34,8 @@ def features(games):
 
 
 def fingerprint(games):
-    return hashlib.sha256(games.to_csv(index=False).encode()).hexdigest()
+    canonical = games.to_csv(index=False, lineterminator="\n", float_format="%.12g")
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 def bundle_model(rows):

@@ -16,7 +16,7 @@ class DashboardTests(unittest.TestCase):
             app.sidebar.selectbox[0].set_value(player).run()
             app.sidebar.radio[1].set_value("expected").run()
             self.assertEqual(len(app.exception), 0)
-            self.assertEqual(len(app.metric), 4)
+            self.assertEqual(len(app.metric), 4, [item.value for item in [*app.error, *app.warning]])
             self.assertTrue(any("Ridge" in item.value for item in app.caption))
 
     def test_demo_projection_and_availability(self):
