@@ -1,21 +1,25 @@
 # CourtIQ
 
-CourtIQ is a basketball analytics project I built around one question: **How much can a player's recent games tell me about their next one?**
+I built CourtIQ to see whether a player's recent box scores could improve on a simple five-game average. It started as a Luka Dončić points predictor. I expanded it into a Streamlit app that forecasts points, rebounds, assists and their sum (PRA) for Luka, Kyrie Irving, Jayson Tatum, Shai Gilgeous-Alexander and Jalen Brunson.
 
-The app forecasts points, rebounds, assists and PRA (the sum of those three) for Luka Dončić, Kyrie Irving, Jayson Tatum, Shai Gilgeous-Alexander and Jalen Brunson. It shows each player's recent games, compares the forecasts with simple benchmarks and links to official NBA highlights.
+I built the data pipeline, trained a separate model for each player and tested the forecasts on games played after the training period. On the 249 held-out appearances, Ridge beat the five-game average for points for three of the five players and for PRA for two. The app shows both methods' errors, so it's easy to see where the extra modeling helped.
+
+[How I tested it](#how-i-checked-the-forecasts) · [Results by player](#results-from-the-included-snapshot) · [Run it locally](#run-it)
 
 ## Run it
 
-Use Python 3.10 or 3.11. From the repository folder:
+Use Python 3.10 or 3.11. These commands download the `courtiq-v2` branch and start the app.
 
 ```bash
+git clone --branch courtiq-v2 https://github.com/Mykeil-tzul/nba-player-predictor.git
+cd nba-player-predictor
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt
 python -m streamlit run app.py
 ```
 
-The repository includes the five-player snapshot and the fitted models used for the results below. The stats and forecasts use local files. The portraits and film links require an internet connection.
+Open the local address printed in your terminal. The repository includes the five-player snapshot and fitted models used for the results below. The stats and forecasts use local files. The portraits and film links require an internet connection.
 
 1. Choose a player and enter the date of their next scheduled game.
 2. If you expect the player to appear, select **Expected to play**. The forecast assumes the player gets on the floor.
@@ -42,7 +46,7 @@ I fit a separate Ridge regression for each player. Ridge is a linear model that 
 
 For each player, I fit the model using the earliest 80% of usable games and keep the latest 20% for evaluation. The model weights stay fixed during that test. For each test game, the inputs can include any earlier game that would already have been played at the time. I then refit on all usable games to produce the model used by the app.
 
-I score all three methods on the same test games:
+I score all three methods on the same test games.
 
 - **Last appearance** uses the player's previous box score.
 - **Last five average** averages those stats over the player's last five appearances.
@@ -64,13 +68,13 @@ Ridge was better than the five-game average on points for three players, but the
 
 ## Refresh the data and reproduce the results
 
-To reproduce the scores above from the included snapshot:
+Run this command to reproduce the scores above from the included snapshot.
 
 ```bash
 python -m src.train
 ```
 
-To pull newer season files and retrain:
+To pull newer season files and retrain, run the importer before training.
 
 ```bash
 python -m src.import_archive && python -m src.train
@@ -81,6 +85,10 @@ The archive importer can also read five local Parquet files named `2023.parquet`
 The game snapshot is `data/games.csv`. Training writes `artifacts/courtiq.json` with the model coefficients, scores and a fingerprint of the snapshot. If the data changes, the app asks for fresh training so the displayed scores and forecasts come from the same snapshot.
 
 A forecast is conditional on the player appearing. CourtIQ relies on the date and availability selected in the sidebar. It withholds forecasts for unconfirmed or out players and when the target date is more than 30 days after the last recorded appearance. The app flags older snapshots so the user knows when to refresh.
+
+## What I'd test next
+
+The app uses recent box scores and time since the player's last appearance. Opponent defense, lineup changes and minutes restrictions could explain some of the larger misses. I'd start by testing whether adding opponent defense improves points forecasts on a new stretch of games, using the same five-game average for comparison.
 
 ## Project layout
 
