@@ -1,5 +1,7 @@
 # CourtIQ
 
+[**Open the live CourtIQ dashboard**](https://nba-player-predictor-bytzul.streamlit.app/)
+
 I built CourtIQ to see whether a player's recent box scores could improve on a simple five-game average. It started as a Luka Doncic points predictor. I expanded it into a Streamlit app that forecasts points, rebounds, assists and their sum (PRA) for Luka, Kyrie Irving, Jayson Tatum, Shai Gilgeous-Alexander and Jalen Brunson.
 
 I built the data pipeline, trained a separate model for each player and tested the forecasts on games played after the training period. On the 249 held-out appearances, Ridge beat the five-game average for points for three of the five players and for PRA for two. The app shows both methods' errors, so it's easy to see where the extra modeling helped.
@@ -8,10 +10,10 @@ I built the data pipeline, trained a separate model for each player and tested t
 
 ## Run it
 
-Use Python 3.10 or 3.11. These commands download the `courtiq-v2` branch and start the app.
+Use Python 3.10 or 3.11. These commands download the project and start the app.
 
 ```bash
-git clone --branch courtiq-v2 https://github.com/Mykeil-tzul/nba-player-predictor.git
+git clone https://github.com/Mykeil-tzul/nba-player-predictor.git
 cd nba-player-predictor
 python3 -m venv .venv
 source .venv/bin/activate
