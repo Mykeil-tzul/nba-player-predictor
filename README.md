@@ -10,6 +10,8 @@ I built CourtIQ to see whether a player's recent box scores could improve on a s
 
 I built the data pipeline, trained a separate model for each player and tested the forecasts on games played after the training period. On the 249 held-out appearances, Ridge beat the five-game average for points for three of the five players and for PRA for two. The app shows both methods' errors, so it's easy to see where the extra modeling helped.
 
+Start with [the Python dashboard](app.py) or [the forecasting code](src/model.py). The [original notebook](nba_player_predictor.ipynb) records my first Luka scoring experiment.
+
 [How I tested it](#how-i-checked-the-forecasts) · [Results by player](#results-from-the-included-snapshot) · [Run it locally](#run-it)
 
 ## Run it
